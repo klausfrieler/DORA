@@ -200,13 +200,12 @@ generate_combined_rhythms <- function(){
     ungroup()
 }
 
-generate_experimental_design <- function(n_modalities = 5, n_rhythms = 10, n_participants = 120, rhythm_tbl){
+generate_experimental_design <- function(n_modalities = 5, n_rhythms = 10, n_participants = 120, rhythm_tbl, save = T){
   perm4 <- permn(1:(n_modalities -1))
   num_perm <- length(perm4)
   rep_pairs <- combn(1:n_modalities, 2) %>% t()
   num_pairs <- nrow(rep_pairs)
   counter <- 0
-  browser()
   ret <- NULL
   for(i in 1:n_participants){
     for(r in 1:n_rhythms){
@@ -223,5 +222,11 @@ generate_experimental_design <- function(n_modalities = 5, n_rhythms = 10, n_par
       counter <- counter + 1
     }
   }  
-  ret %>% left_join(ar %>% select(rhythm, variant, code), by = c("rhythm", "variant"))
+  ret <- ret %>% 
+    left_join(ar %>% select(rhythm, variant, code), by = c("rhythm", "variant")) %>% 
+    mutate(midi_file = sprintf("%02d_%s.mid", rhythm, code))
+  if(save){
+    ret %>%  write.table(file = "experimental_design.csv", sep = ";", row.name = F, quote = F)
+  }
+  ret
 }
