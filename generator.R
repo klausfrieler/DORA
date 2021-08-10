@@ -3,22 +3,22 @@ library(combinat)
 
 messagef <- function(...) message(sprintf(...))
 
-rhythms <- tribble(~id, ~code, ~period,
-  1, "abaa", 4,
-  2, "bcaa", 4,
-  3, "ddba", 4,
-  4, "aeaa", 4,
-  5, "aabaa", 3,
-  6, "bbbaaa", 3,
-  7, "aeadda", 3,
+rhythms <- tribble(~rhythm, ~code, ~period,
+  1, "abaa",    4,
+  2, "bcaa",    4,
+  3, "ddba",    4,
+  4, "aeaa",    4,
+  5, "aabaa",   3,
+  6, "bbbaaa",  3,
+  7, "aeadda",  3,
   8, "aabbaba", 4,
-  9, "bccfga", 4,
+  9, "bccxfga",  4,
   10, "bbcaada", 4
 )
 
 
 invalid_ends <- c("d", "e", "f", "g")
-invalid_ends <- c("d", "f")
+invalid_ends <- c("c", "d", "f")
 triplets <- c("f", "g")
 
 all_cycles <- function(x){
@@ -66,8 +66,8 @@ generate_rhythms <- function(rhythm, type = "cycles"){
     mutate(original = code == rhythm[[1]], invalid_end = invalid_end, invalid_triplets = invalid_triplets) %>% 
     distinct(code, .keep_all = T) %>% 
     #arrange(code) %>% 
-    mutate(perm_id = 1:nrow(.)) %>% 
-    select(perm_id, everything())
+    mutate(variant = sprintf("%s%d", substr(type, 1, 1), 1:nrow(.))) %>% 
+    select(variant, everything())
   ret  
 }
 
@@ -77,8 +77,8 @@ generate_all_rhythms <- function(type = "cycles"){
     ret <- 
       generate_rhythms(rhythms$code[r], type = type) %>% 
       filter(!invalid_end, !invalid_triplets) %>% 
-      mutate(id = r, period = rhythms$period[r]) %>% 
-      select(id, perm_id, code, original, period) 
+      mutate(rhythm = r, period = rhythms$period[r]) %>% 
+      select(rhythm, variant, code, original, period) 
     ret
   })
 }
@@ -106,6 +106,12 @@ realize_rhythm_atom <-function(rhythm_code, start_mpos = 0, period = 4, pitch = 
   if(rhythm_code == "g"){
     ret <- tibble(pitch = c(pitch), mpos = c(start_mpos + 4), iois = c(8), division = 3)
   }
+  if(rhythm_code == "h"){
+    ret <- tibble(pitch = c(pitch), mpos = c(start_mpos + 6), iois = c(18), division = 2)
+  }
+  if(rhythm_code == "x"){
+    ret <- tibble(pitch = -1, mpos = start_mpos, iois = c(12), division = 1)
+  }
   ret %>% mutate(period = period)
 }
 
@@ -118,7 +124,7 @@ realize_rhythm_code <- function(rhythm_code, period = 4){
     mpos <- mpos + 12    
     ret <- bind_rows(ret, tmp)
   }
-  ret
+  ret %>% filter(pitch >= 0)
 }
 
 rhythm_to_mcsv2 <- function(rhythm_tbl, tempo = 120, phrase_id = 1, chorus_id = 1){
@@ -148,46 +154,53 @@ rhythm_to_mcsv2 <- function(rhythm_tbl, tempo = 120, phrase_id = 1, chorus_id = 
   return(final[, c("onset", "duration", "period", "division", "bar", "beat", "tatum", "beat_duration", "signature", "pitch", "phrase_id", "phrase_begin",  "chorus_id")])
 }
 
-all_rhythms_to_csv2 <- function(type = "cycles"){
+all_rhythms_to_csv2 <- function(type = "combined", save = F){
   if(type == "combined"){
     ar <- generate_combined_rhythms()
+    ar[is.na(ar$cycle), ]$cycle <- FALSE
   }
   else{
     ar <- generate_all_rhythms(type = type)  
   }
-  map(1:nrow(ar), function(x){
+  if(save){
+    map(1:nrow(ar), function(x){
     realize_rhythm_code(ar[x,]$code, ar[x,]$period) %>% 
       rhythm_to_mcsv2() %>% 
-      write.table(file = sprintf("rhythms/%02d_%s.csv", ar[x,]$id, ar[x,]$code), sep = ";", row.names = F, quote = F)
-  })
+      write.table(file = sprintf("rhythms/%02d_%s.csv", ar[x,]$rhythm, ar[x,]$code), sep = ";", row.names = F, quote = F)
+    })
+  }
   messagef("Generated %d rhythms", nrow(ar))
   ar
 }
 
 generate_combined_rhythms <- function(){
-  set.seed(666)
+  set.seed(888)
   ar_perm <- generate_all_rhythms(type = "perm") 
   ar_cycle <- generate_all_rhythms(type = "cycles")
   ar_comb <- ar_perm %>% left_join(ar_cycle %>% select(code) %>% mutate(cycle = TRUE), by = "code")
+  ar_comb[ar_comb$original,]$cycle <- TRUE
   ar_comb[is.na(ar_comb$cycle),]$cycle <- FALSE
   ar_comb <- ar_comb %>% 
-    group_by(id) %>% 
-    mutate(n_cycles = sum(cycle), missing = 4 - n_cycles) %>% 
+    group_by(rhythm) %>% 
+    mutate(n_cycles = sum(cycle), missing = (n_cycles < 4 ) * (4 - n_cycles)) %>% 
     ungroup()
   extra <- NULL
-  for(i in unique(ar_comb$id)){
-    missing <- ar_comb[ar_comb$id == i,]$missing %>% unique()
+  for(i in unique(ar_comb$rhythm)){
+    missing <- ar_comb[ar_comb$rhythm == i,]$missing %>% unique()
     if(missing > 0){
-      extra <- bind_rows(extra, ar_comb %>% filter(!cycle, id == i) %>% sample_n(missing))        
+      extra <- bind_rows(extra, ar_comb %>% filter(!cycle, rhythm == i) %>% sample_n(missing))        
     }  
   }
-  ar <- bind_rows(ar_cycle, extra %>% select(-n_cycles, -missing))  
-  map_dfr(unique(ar_comb$id), function(x){
-    ar %>% filter(id == x) %>% sample_n(4)
-  })
+  ar <- bind_rows(ar_cycle %>% mutate(cycle = TRUE), extra %>% select(-n_cycles, -missing))  
+  map_dfr(unique(ar_comb$rhythm), function(x){
+    ar %>% filter(rhythm == x) %>% sample_n(4)
+  })  %>% 
+    group_by(rhythm) %>% 
+    mutate(variant = as.integer(factor(variant))) %>%
+    ungroup()
 }
 
-generate_experimental_design <- function(n_modalities = 5, n_rhythms = 10, n_participants = 130){
+generate_experimental_design <- function(n_modalities = 5, n_rhythms = 10, n_participants = 120, rhythm_tbl){
   perm4 <- permn(1:(n_modalities -1))
   num_perm <- length(perm4)
   rep_pairs <- combn(1:n_modalities, 2) %>% t()
@@ -204,11 +217,11 @@ generate_experimental_design <- function(n_modalities = 5, n_rhythms = 10, n_par
       variants <- rep(0, n_modalities)
       variants[rep] <- perm[1]
       variants[variants == 0] <- perm[perm != perm[1]]
-      tmp <- tibble(p_id = i, rhythm = r, modality = 1:n_modalities, variant = variants, rep_code = rep_code)
+      tmp <- tibble(p_id = i, rhythm = r, modality = 1:n_modalities, variant = variants)
       #print(tmp)
       ret <- bind_rows(ret, tmp)
       counter <- counter + 1
     }
   }  
-  ret
+  ret %>% left_join(ar %>% select(rhythm, variant, code), by = c("rhythm", "variant"))
 }
