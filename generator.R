@@ -3,22 +3,44 @@ library(combinat)
 
 messagef <- function(...) message(sprintf(...))
 
-rhythms <- tribble(~rhythm, ~code, ~period,
-  1, "abaa",    4,
-  2, "bcaa",    4,
-  3, "ddba",    4,
-  4, "aeaa",    4,
-  5, "aabaa",   3,
-  6, "bbbaaa",  3,
-  7, "aeadda",  3,
-  8, "aabbaba", 4,
-  9, "bccxfga",  4,
-  10, "bbcaada", 4
-)
+#"a" = Quarter note
+#"b" = two eighth notes
+#"c" = eighth note pause + eighth note 
+#"d" = dotted eighth note ü sixteenths
+#"e" = eighth note triplet
+#"f" = "eighth note  + eighth note pause + eighth note" triplet, last bound
+#"f" = "eighth note  + eighth note pause + eighth note" triplet, first bound
+#"x" ?= quarter note pause
 
+rhythms_complex <- tribble(~rhythm, ~code, ~period,
+                           1,  "abaa",     4,
+                           2,  "bcaa",     4,
+                           3,  "ddba",     4,
+                           4,  "aeaa",     4,
+                           5,  "aabaa",    3,
+                           6,  "bbbaaa",   3,
+                           7,  "aeadda",   3,
+                           8,  "aabbaba",  4,
+                           9,  "bccxfga",  4,
+                           10, "bbcaaea", 4)
+
+rhythms_simple <- tribble(~rhythm, ~code, ~period,
+                          1, "aaba", 4,
+                          2, "bbaa", 4,
+                          3, "bcaa", 4,
+#                          4, "abaa", 4,
+                          4, "aaaab", 3,
+                          5, "aaaa", 4,
+                          6, "acba", 4,
+                          7, "ddaa", 4,
+                          8, "aeaa", 4,
+                          9, "bbbb", 4,
+                         10, "dbba", 4
+)
 
 invalid_ends <- c("d", "e", "f", "g")
 invalid_ends <- c("c", "d", "f")
+invalid_ends <- "f"
 triplets <- c("f", "g")
 
 all_cycles <- function(x){
@@ -36,6 +58,7 @@ generate_rhythms <- function(rhythm, type = "cycles"){
     permutations <- permn(str_split(rhythm[[1]], "")[[1]])
     
   }
+  #browser()
   codes <- 
     permutations %>% 
     map_chr(~{paste(.x, collapse = "")}) 
@@ -71,7 +94,7 @@ generate_rhythms <- function(rhythm, type = "cycles"){
   ret  
 }
 
-generate_all_rhythms <- function(type = "cycles"){
+generate_all_rhythms <- function(rhythms, type = "cycles"){
   map_dfr(1:nrow(rhythms), function(r){
     messagef("Generating rhythm %02d: %s (%s)", r, rhythms$code[r], type)
     ret <- 
@@ -84,7 +107,7 @@ generate_all_rhythms <- function(type = "cycles"){
 }
 
 
-realize_rhythm_atom <-function(rhythm_code, start_mpos = 0, period = 4, pitch = 72){
+realize_rhythm_atom <- function(rhythm_code, start_mpos = 0, period = 4, pitch = 72){
   if(rhythm_code == "a"){
     ret <- tibble(pitch = pitch, mpos = start_mpos, iois = 12, division = 1)
   }
@@ -154,29 +177,30 @@ rhythm_to_mcsv2 <- function(rhythm_tbl, tempo = 120, phrase_id = 1, chorus_id = 
   return(final[, c("onset", "duration", "period", "division", "bar", "beat", "tatum", "beat_duration", "signature", "pitch", "phrase_id", "phrase_begin",  "chorus_id")])
 }
 
-all_rhythms_to_csv2 <- function(type = "combined", save = F){
+all_rhythms_to_csv2 <- function(rhythms, type = "combined", save = F, out_dir = "rhythms"){
   if(type == "combined"){
-    ar <- generate_combined_rhythms()
+    ar <- generate_combined_rhythms(rhythms)
     ar[is.na(ar$cycle), ]$cycle <- FALSE
   }
   else{
-    ar <- generate_all_rhythms(type = type)  
+    ar <- generate_all_rhythms(rhythms, type = type)  
   }
   if(save){
     map(1:nrow(ar), function(x){
     realize_rhythm_code(ar[x,]$code, ar[x,]$period) %>% 
       rhythm_to_mcsv2() %>% 
-      write.table(file = sprintf("rhythms/%02d_%s.csv", ar[x,]$rhythm, ar[x,]$code), sep = ";", row.names = F, quote = F)
+      write.table(file = sprintf("%s/%02d_%s.csv", out_dir, ar[x,]$rhythm, ar[x,]$code), sep = ";", row.names = F, quote = F)
     })
   }
   messagef("Generated %d rhythms", nrow(ar))
   ar
 }
 
-generate_combined_rhythms <- function(){
+generate_combined_rhythms <- function(rhythms){
   set.seed(888)
-  ar_perm <- generate_all_rhythms(type = "perm") 
-  ar_cycle <- generate_all_rhythms(type = "cycles")
+  browser()
+  ar_perm <- generate_all_rhythms(rhythms, type = "perm") 
+  ar_cycle <- generate_all_rhythms(rhythms, type = "cycles")
   ar_comb <- ar_perm %>% left_join(ar_cycle %>% select(code) %>% mutate(cycle = TRUE), by = "code")
   ar_comb[ar_comb$original,]$cycle <- TRUE
   ar_comb[is.na(ar_comb$cycle),]$cycle <- FALSE
@@ -185,22 +209,33 @@ generate_combined_rhythms <- function(){
     mutate(n_cycles = sum(cycle), missing = (n_cycles < 4 ) * (4 - n_cycles)) %>% 
     ungroup()
   extra <- NULL
+  
   for(i in unique(ar_comb$rhythm)){
     missing <- ar_comb[ar_comb$rhythm == i,]$missing %>% unique()
-    if(missing > 0){
-      extra <- bind_rows(extra, ar_comb %>% filter(!cycle, rhythm == i) %>% sample_n(missing))        
+    candidates <- ar_comb %>% filter(!cycle, rhythm == i)
+    num_candidates <- nrow(candidates)
+    if(missing > 0 && num_candidates > 0){
+      extra <- bind_rows(extra, candidates %>% sample_n(min(missing, num_candidates)))        
     }  
   }
-  ar <- bind_rows(ar_cycle %>% mutate(cycle = TRUE), extra %>% select(-n_cycles, -missing))  
+  #browser()
+  if(!is.null(extra)){
+    browser()
+    extra <- extra %>% select(-n_cycles, -missing)
+  }
+  ar <- bind_rows(ar_cycle %>% mutate(cycle = TRUE), extra)  
   map_dfr(unique(ar_comb$rhythm), function(x){
-    ar %>% filter(rhythm == x) %>% sample_n(4)
+    ar %>% filter(rhythm == x) %>% sample_n(min(4, nrow(.)))
   })  %>% 
     group_by(rhythm) %>% 
     mutate(variant = as.integer(factor(variant))) %>%
     ungroup()
 }
 
-generate_experimental_design <- function(n_modalities = 5, n_rhythms = 10, n_participants = 120, rhythm_tbl, save = T){
+generate_experimental_design <- function(n_modalities = 5, n_rhythms = 10, n_participants = 120, rhythm_tbl = NULL, rhythms, save = T){
+  if(is.null(rhythm_tbl)){
+    rhythm_tbl <- all_rhythms_to_csv2(rhythms, type = "combined", save = save)   
+  }
   perm4 <- permn(1:(n_modalities -1))
   num_perm <- length(perm4)
   rep_pairs <- combn(1:n_modalities, 2) %>% t()
@@ -223,10 +258,11 @@ generate_experimental_design <- function(n_modalities = 5, n_rhythms = 10, n_par
     }
   }  
   ret <- ret %>% 
-    left_join(ar %>% select(rhythm, variant, code), by = c("rhythm", "variant")) %>% 
-    mutate(midi_file = sprintf("%02d_%s.mid", rhythm, code))
+    left_join(rhythm_tbl %>% select(rhythm, variant, code), by = c("rhythm", "variant")) %>% 
+    mutate(midi_file = sprintf("%02d_%s.mid", rhythm, code)) %>% 
+    sample_n(nrow(.)) %>% arrange(p_id, rhythm)
   if(save){
-    ret %>%  write.table(file = "experimental_design.csv", sep = ";", row.name = F, quote = F)
+    ret %>%  write.table(file = "experimental_design_rhythm_simple.csv", sep = ";", row.name = F, quote = F)
   }
   ret
 }
