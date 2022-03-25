@@ -19,17 +19,20 @@ parse_filename <- function(fname){
 
 get_basic_stats <- function(onset){
   iois <- diff(onset)
-  tibble(m_IOI = mean(iois, na.rm = T),
-         med_IOI = median(iois, na.rm = T),
-         sd_IOI = sd(iois, na.rm = T),
-         t0 = onset[1])
+  tibble(mean_ioi = mean(iois, na.rm = T),
+         med_ioi = median(iois, na.rm = T),
+         sd_ioi = sd(iois, na.rm = T),
+         cv_ioi = sd_ioi/mean_ioi, 
+         t0 = onset[1]) 
 }
 
 read_all_files <- function(data_dir){
-  files <- list.files(data_dir, full.names = T)
+  files <- list.files(data_dir, pattern = "*.csv", full.names = T)
   map_dfr(files, 
           function(fn){
-            read.csv(fn, header = F) %>% 
+            messagef("Reading %s", fn)
+            browser()
+            tmp <- read.csv(fn, header = F, stringsAsFactors = F) %>% 
               as_tibble() %>% 
               bind_cols(parse_filename(fn))
             }) %>% 
@@ -39,4 +42,17 @@ read_all_files <- function(data_dir){
     mutate(n_onsets = n()) %>% 
     mutate(get_basic_stats(onset)) %>% 
     ungroup()
+}
+
+setup_workspace <- function(iso_data_dir, rhythm_data_dir = NULL, reread_data = FALSE){
+  if(reread_data){
+    all_data_iso <- read_all_files(iso_data_dir)
+    #all_data_rhythm <- read_all_files("rhythm")
+    saveRDS(all_data_iso, file.path(iso_data_dir, "all_data_ioi.rds"))
+  }
+  else{
+    all_data_iso <- readRDS(file.path(iso_data_dir, "all_data_ioi.rds"))
+  }
+  assign("all_data_iso", all_data_iso, globalenv())
+  invisible(all_data_iso)
 }

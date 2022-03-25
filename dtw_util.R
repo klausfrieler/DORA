@@ -1,7 +1,7 @@
 library(tidyverse)
 library(dtw)
 
-simulate_beats <- function(T = .5, n_beats, offset = 0, sd = .1*T){
+simulate_beats <- function(T = .5, n_beats, offset = 0, sd = .1 * T){
   iois <- rep(T, n_beats - 1) + rnorm(n_beats - 1, 0, sd)
   t <- cumsum(c(0, iois)) + offset
   t
