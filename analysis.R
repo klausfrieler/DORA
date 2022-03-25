@@ -87,7 +87,7 @@ get_iso_features <- function(onset_data){
   
 }
 
-get_productions_features <- function(onsets, target_rhythm, isochronous = F){
+get_production_features <- function(onsets, target_rhythm, isochronous = F){
   ret <- NULL
   if(isochronous){
     #ret <- make cool circular stuff

@@ -1,4 +1,5 @@
 library(tidyverse)
+source("analysis.R")
 
 parse_filename <- function(fname){
   fname <- fname %>% basename() %>% str_replace(".csv", "") 
@@ -46,13 +47,20 @@ read_all_files <- function(data_dir){
 
 setup_workspace <- function(iso_data_dir, rhythm_data_dir = NULL, reread_data = FALSE){
   if(reread_data){
+    messagef("Importing all data fro %s", iso_dat_dir)
     all_data_iso <- read_all_files(iso_data_dir)
     #all_data_rhythm <- read_all_files("rhythm")
     saveRDS(all_data_iso, file.path(iso_data_dir, "all_data_ioi.rds"))
   }
   else{
+    messagef("Reading all_data_iso.rds")
     all_data_iso <- readRDS(file.path(iso_data_dir, "all_data_ioi.rds"))
   }
   assign("all_data_iso", all_data_iso, globalenv())
+  messagef("Calculating iso features...")
+  iso_features <-  get_iso_features(all_data_iso) 
+  assign("iso_features", iso_features, globalenv())
+  messagef("Done.")
+  
   invisible(all_data_iso)
 }
