@@ -1,5 +1,6 @@
 library(tidyverse)
 library(dtw)
+library(circular)
 
 tempos <- c("fa" = .4, "sl" = .6)
 max_times <- tempos*c(50, 33)
@@ -11,7 +12,8 @@ get_timeline_parameters <- function(timeline, time_base){
 }
 
 get_isochronous_envelope <- function(query, time_base){
-  seq(floor(min(query)), ceiling(max(query)), time_base)
+  offset <- min(query) %% time_base
+  seq(min(query - offset), ceiling(max(query)/time_base) * time_base, time_base) 
 }
 
 #' get_best_alignment: Calc best DTW alignment between to timelines and optional features derived from this 
@@ -60,12 +62,7 @@ get_best_alignment <- function(query, target){
   list(raw = ba, summary = summary)  
 }
 
-get_circular_features <- function(onsets, time_base, remove_offset = F){
-  require(circular)
-  #remove offset, i.e. moving first onset to zero  
-  if(remove_offset){
-    onsets <- onsets - onsets[1]
-  }
+get_circular_features <- function(onsets, time_base){
   #transform onsets to cicrular variables, based on time_base as periodictiy.
   # onsets which are separated by multiples of the time_base ar mapped to the same point on
   # the 2d circle
@@ -85,60 +82,85 @@ get_circular_features <- function(onsets, time_base, remove_offset = F){
          asynchrony = sign(circ_mean))
 }
 
-get_iso_features <- function(onset_data, remove_offset = F, cut_extra_beats = T){
+
+
+signed_mod <- Vectorize(function(x, p){
+  ret <- x %% p
+  if(ret > p/2) ret <- ret - p 
+  ret
+})
+
+get_iso_features <- function(onset_data, cut_extra_beats = T){
   base_data <- onset_data %>% 
     distinct(experimenter, 
-             age_group, condition, 
-             serial, source, 
+             age_group, 
+             condition, 
+             serial,
+             source, 
              tempo, 
              setting, 
              p_id, 
              trial_id, 
+             set_id,
              mean_ioi, 
-             med_ioi, 
+             med_ioi,
+             max_ioi,
              sd_ioi,
-             cv_ioi) 
+             log_sd_ioi,
+             cv_ioi,
+             valid_phase) 
   tids <- unique(onset_data$trial_id)
   #iterate over all trials
   map_dfr(tids, function(tid){
+    
+    #get the data and the onsts
     tmp <- onset_data %>% filter(trial_id == tid) 
     query <- tmp %>% pull(onset)
     offset <- query[1]
     
-    #remove offset if requested
-    if(remove_offset) query <-  query - offset
-    
     #time_base is just the (inverse) tempo
     time_base <- tempos[tmp$tempo[1]]
     
-    #if requested, disregard beatsbeyond the maximum time of the trials, as participant sometime simple played on
+    # if(tmp$valid_phase[1]){
+    #   browser()
+    # }
+    
+    #if requested, disregard beats beyond the maximum time of the trials, as participant sometime simple played on
     if(cut_extra_beats){
       #browser()
       n_before <- length(query)
       mt_before <- max(query)
       query <- query[query <= max_times[tmp$tempo[1]]]
+      if(length(query) == 0){
+        browser()
+      }
       messagef("[%s] Cut query from %d to %d (d = %d, t_before = %.3f, tempo = %s)", 
                tid,
                n_before, length(query), 
                n_before - length(query),
                mt_before, tmp$tempo[1])
     }
+    #browser()
     #we generate a isochronous timeline for comparison (isochronous envelope)
     iso_env <- get_isochronous_envelope(query, time_base)
-    
+    #iso_env <- iso_env[iso_env <= max(query)]
     #first circular features
-    circ_features <- get_circular_features(query, time_base, remove_offset = remove_offset)
-    
+    circ_features <- get_circular_features(query, time_base)
     #then alignment base features
+    
+    #shift
+    # query_shifted <-  query - (offset - offset %% time_base)
+    # iso_env_shifted <- iso_env[iso_env <= max(query_shifted)]
+    
     best_aligment <- get_best_alignment(query, iso_env)
     alignment_features <-  best_aligment$summary %>% 
       mutate(trial_id = tid, 
              offset = offset,
+             mod_offset = signed_mod(offset, time_base),
              time_base = time_base)
     
     #combined the features
-    bind_cols(alignment_features, circ_features) %>% 
-      mutate(removed_offset = remove_offset)
+    bind_cols(alignment_features, circ_features) 
   }) %>% 
     select(trial_id, time_base, offset, MAE, MAS, d_n, norm_dist, everything()) %>% 
     left_join(base_data, by = "trial_id")
@@ -157,7 +179,7 @@ get_ref_rhythm_for_trial <- function(trial_id, stimulus_data){
 }
 
 check_rhythm <- function(trial_id, onset_data, stimulus_data, remove_offset = T, plot = F){
-  browser()
+  #browser()
   query <- onset_data %>% filter(trial_id == !!trial_id) %>% pull(onset)
   if(remove_offset){
     query <- query - query[1]  
@@ -244,6 +266,7 @@ get_rhythm_features <- function(onset_data, stimulus_data){
              setting,
              p_id,
              trial_id,
+             set_id,
              n_onsets) %>% 
     left_join(stimulus_data$design %>% select(condition = p_id, setting,  rhythm, code),
               by = c("condition", "setting", "rhythm"))
@@ -309,7 +332,7 @@ get_rhythm_features <- function(onset_data, stimulus_data){
     #binding features together
     bind_cols(alignment_features, circ_features, tempo_est)
   }) %>% 
-    select(trial_id, offset, MAE, MAS, d_n, norm_dist, everything()) %>% 
+    select(trial_id, set_id, offset, MAE, MAS, d_n, norm_dist, everything()) %>% 
     left_join(base_data, by = c("trial_id", "rhythm", "code"))
   
 }

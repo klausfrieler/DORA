@@ -19,7 +19,8 @@ parse_filename <- function(fname, type = c("iso", "rhythm_prod", "rhythm_def")){
              tempo = x[6],
              setting = x[7],
              p_id = paste(x[1:3], collapse = "_"),
-             trial_id = paste(x, collapse = "_")
+             trial_id = paste(x, collapse = "_"),
+             set_id = paste(experimenter, age_group, condition, serial, tempo, setting, sep = "_")
              )
     })
   } 
@@ -33,6 +34,7 @@ parse_filename <- function(fname, type = c("iso", "rhythm_prod", "rhythm_def")){
              rhythm = x[6],
              setting = x[7],
              p_id = paste(x[1:3], collapse = "_"),
+             set_id = paste(experimenter, age_group, condition, serial, rhythm, setting, sep = "_"),
              trial_id = paste(x, collapse = "_"))
       })
   }
@@ -50,6 +52,7 @@ get_basic_stats <- function(onset, type = c("iso", "rhythm_prod")){
   if(type == "iso"){
     tibble(mean_ioi = mean(iois, na.rm = T),
            med_ioi = median(iois, na.rm = T),
+           max_ioi = max(iois, na.rm = T),
            sd_ioi = sd(iois, na.rm = T),
            log_sd_ioi = log(sd(iois, na.rm = T)),
            cv_ioi = sd_ioi/mean_ioi, 
@@ -63,7 +66,7 @@ get_basic_stats <- function(onset, type = c("iso", "rhythm_prod")){
 
 read_all_files <- function(data_dir, type = c("iso", "rhythm_prod")){
   type <- match.arg(type)
-  files <- list.files(data_dir, pattern = "*.csv", full.names = T)
+  files <- list.files(data_dir, pattern = ".csv$", full.names = T)
   map_dfr(files, 
           function(fn){
           #messagef("Reading %s", fn)
@@ -103,8 +106,9 @@ setup_rhythm_data <- function(rhythm_stim_dir = "rhythms_simple2",
                            levels = 1:10,
                            labels = c('i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix', 'x'))) %>%
   select(-modality, -midi_file, -variant, -patch_code)
-    
-  rf <- list.files(rhythm_stim_dir, pattern = "*.csv", full.names = T)
+  
+  
+  rf <- list.files(rhythm_stim_dir, pattern = ".csv$", full.names = T)
   rhythm_data <- 
     map_dfr(rf, function(fn){
       data.table::fread(fn) %>% 
@@ -118,6 +122,23 @@ setup_rhythm_data <- function(rhythm_stim_dir = "rhythms_simple2",
   list(design = rhythm_design, rhythms = rhythm_data)
 }
 
+fix_iso_onsets <- function(iso_data, iso_cut_times){
+  #browser()
+  iso_data <- iso_data %>% 
+    left_join(iso_cut_times %>% select(set_id, source, cut_time), by = c("set_id", "source")) %>% 
+    mutate(real_onset = onset + cut_time)
+  first_onsets <- iso_data %>% 
+    filter(source == "ro") %>% 
+    group_by(set_id) %>% 
+    summarise(first_onset = first(real_onset), .groups = "drop")
+  iso_data <- iso_data %>% 
+    left_join(first_onsets, by = "set_id") %>% 
+    mutate(onset = case_when(!is.na(first_onset) ~ real_onset - first_onset, T ~ onset)) 
+  iso_data <- iso_data %>% 
+    mutate(valid_phase = !is.na(first_onset))
+  
+  iso_data %>% filter(source != "ro") %>% select(-real_onset, -first_onset)
+}
 post_process <- function(data, data_type = c("onsets", "features"), type = c("iso", "rhythm_prod")){
   data_type <- match.arg(data_type)
   type <- match.arg(type)
@@ -127,22 +148,33 @@ post_process <- function(data, data_type = c("onsets", "features"), type = c("is
   data <- data %>% filter(source != "ex")
 }
 
-setup_workspace <- function(iso_data_dir = "data/drumking", rhythm_data_dir = "data/rhythm_prod", reread_data = FALSE){
+setup_workspace <- function(iso_data_dir = "data/iso", 
+                            rhythm_data_dir = "data/rhythm_prod", 
+                            reread = c("none", "iso", "rhythm", "both")){
+  reread <- match.arg(reread) 
   messagef("Reading stimulus and design data")
   stimulus_data <- setup_rhythm_data()
   assign("stimulus_data", stimulus_data, globalenv())
+  iso_cut_times <- readxl::read_xlsx("data/iso/meta/cuttimes_audio_iso.xlsx") %>%
+    bind_cols(parse_filename(.$file)) 
+
+  #doing this, not sure if it is correct yet
+  iso_cut_times[is.na(iso_cut_times$cut_time),]$cut_time <- 0.0
+  assign("iso_cut_times", iso_cut_times, globalenv())
   
-  if(reread_data){
+  if(reread %in% c("iso", "both")){
     messagef("Importing all iso data from %s", iso_data_dir)
-    iso_data <- read_all_files(iso_data_dir, type = "iso") %>% filter(source != "ro")
+    #browser()
+    iso_data <- read_all_files(iso_data_dir)
     saveRDS(iso_data, file.path(iso_data_dir, "iso_data.rds"))
     
     messagef("Calculating iso features...")
-    iso_features <-  get_iso_features(iso_data) 
+    iso_features <-  get_iso_features(iso_data %>% fix_iso_onsets(iso_cut_times), cut_extra_beats = T) 
     assign("iso_features", iso_features, globalenv())
     saveRDS(iso_features, file.path(iso_data_dir, "iso_features.rds"))
     messagef("Done.")
-
+  }
+  if(reread %in% c("rhythm", "both")){
     messagef("Importing all rhythm data from %s", iso_data_dir)
     messagef <- function(...) message(sprintf(...))
     
@@ -156,7 +188,7 @@ setup_workspace <- function(iso_data_dir = "data/drumking", rhythm_data_dir = "d
     messagef("Done.")
     
   }
-  else{
+  if(reread == "none"){
     messagef("Reading iso data")
     iso_data <- readRDS(file.path(iso_data_dir, "iso_data.rds"))
     iso_features <- readRDS(file.path(iso_data_dir, "iso_features.rds"))
