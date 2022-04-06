@@ -155,11 +155,11 @@ setup_workspace <- function(iso_data_dir = "data/iso",
   messagef("Reading stimulus and design data")
   stimulus_data <- setup_rhythm_data()
   assign("stimulus_data", stimulus_data, globalenv())
-  iso_cut_times <- readxl::read_xlsx("data/iso/meta/cuttimes_audio_iso.xlsx") %>%
-    bind_cols(parse_filename(.$file)) 
+  
+  iso_cut_times <- readxl::read_xlsx("data/meta/cuttimes_audio_iso.xlsx") %>%
+    bind_cols(parse_filename(.$file)) %>% 
+    filter(!is.na(cut_time))
 
-  #doing this, not sure if it is correct yet
-  iso_cut_times[is.na(iso_cut_times$cut_time),]$cut_time <- 0.0
   assign("iso_cut_times", iso_cut_times, globalenv())
   
   if(reread %in% c("iso", "both")){
