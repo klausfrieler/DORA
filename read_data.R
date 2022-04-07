@@ -198,7 +198,7 @@ data_diagnostics <- function(features = iso_features, data = iso_data, cut_times
 
 setup_workspace <- function(iso_data_dir = "data/iso", 
                             rhythm_data_dir = "data/rhythm_prod", 
-                            reread = c("none", "iso", "rhythm", "both")){
+                            reread = c("both", "iso", "rhythm", "none")){
   reread <- match.arg(reread) 
   messagef("Reading stimulus and design data")
   stimulus_data <- setup_rhythm_data()
