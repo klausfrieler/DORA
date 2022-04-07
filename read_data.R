@@ -84,8 +84,8 @@ read_all_files <- function(data_dir, type = c("iso", "rhythm_prod")){
     ungroup()
 }
 
-setup_rhythm_data <- function(rhythm_stim_dir = "rhythms_simple2", 
-                              fname_design = "rhythms_simple2/design/experimental_design_rhythm_simple.csv"){
+setup_rhythm_data <- function(rhythm_stim_dir = "data/meta/stimulus_rhythms/", 
+                              fname_design = "data/meta/experimental_design_rhythm_simple.csv"){
   rhythm_design = read.csv(fname_design, sep = ";", stringsAsFactors = F) %>% 
     as_tibble() 
   
@@ -198,7 +198,7 @@ data_diagnostics <- function(features = iso_features, data = iso_data, cut_times
 
 setup_workspace <- function(iso_data_dir = "data/iso", 
                             rhythm_data_dir = "data/rhythm_prod", 
-                            reread = c("both", "iso", "rhythm", "none")){
+                            reread = c("all", "iso", "rhythm", "none")){
   reread <- match.arg(reread) 
   messagef("Reading stimulus and design data")
   stimulus_data <- setup_rhythm_data()
@@ -210,7 +210,7 @@ setup_workspace <- function(iso_data_dir = "data/iso",
 
   assign("iso_cut_times", iso_cut_times, globalenv())
   
-  if(reread %in% c("iso", "both")){
+  if(reread %in% c("iso", "all")){
     messagef("Importing all iso data from %s", iso_data_dir)
     #browser()
     iso_data <- read_all_files(iso_data_dir)
@@ -222,7 +222,7 @@ setup_workspace <- function(iso_data_dir = "data/iso",
     saveRDS(iso_features, file.path(iso_data_dir, "iso_features.rds"))
     messagef("Done.")
   }
-  if(reread %in% c("rhythm", "both")){
+  if(reread %in% c("rhythm", "all")){
     messagef("Importing all rhythm data from %s", iso_data_dir)
     messagef <- function(...) message(sprintf(...))
     

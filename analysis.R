@@ -134,7 +134,7 @@ get_iso_features <- function(onset_data, cut_extra_beats = T){
       mt_before <- max(query)
       query <- query[query <= max_times[tmp$tempo[1]]]
       if(length(query) == 0){
-        browser()
+        messagef("[%s] WARNING: Empty query after cutting", tid)
         return(NULL)
       }
       messagef("[%s] Cut query from %d to %d (d = %d, t_before = %.3f, tempo = %s)", 
@@ -181,7 +181,7 @@ get_ref_rhythm_for_trial <- function(trial_id, stimulus_data){
   
 }
 
-check_rhythm <- function(trial_id, onset_data, stimulus_data, remove_offset = T, plot = F){
+check_rhythm <- function(trial_id, onset_data = rhythm_data, stimulus_data = stimulus_data, remove_offset = T, plot = T){
   #browser()
   query <- onset_data %>% filter(trial_id == !!trial_id) %>% pull(onset)
   if(remove_offset){
@@ -217,7 +217,7 @@ check_rhythm <- function(trial_id, onset_data, stimulus_data, remove_offset = T,
     q <- plot_dtw_alignment(query, target) + scale_x_continuous(breaks = round(seq(1:3) * ref_ibi, 3), labels = 1:3)
     print(q)
   }
-  browser()
+  #browser()
   tempo_est 
 }
 
@@ -300,7 +300,7 @@ get_rhythm_features <- function(onset_data, stimulus_data){
     #rescale  tempo of reference rhythm (which has  120 bpm)
     target <- ref_rhythm$onset / .5 * tempo
     
-    messagef("Calculating features for trial %s, time base (raw) = %.1f, time base = %.3f, divison = %d, code = %s", tid,  time_base/max(ref_rhythm$division), time_base, max(ref_rhythm$division), code)
+    messagef("[%s] Calculating features with time base = %.3f, division = %d, rhythm code = %s", tid, time_base, max(ref_rhythm$division), code)
     
     #Calc cicrcular features beased on tatums, not bsaed on beat an in the isochronous case! 
     #Attention! Might have non-linear numerical ramifications for different tatums, save tatum and time_base 
