@@ -109,7 +109,9 @@ get_iso_features <- function(onset_data, cut_extra_beats = T){
              log_sd_ioi,
              cv_ioi,
              valid_phase) 
+  
   tids <- unique(onset_data$trial_id)
+  
   #iterate over all trials
   map_dfr(tids, function(tid){
     
@@ -133,6 +135,7 @@ get_iso_features <- function(onset_data, cut_extra_beats = T){
       query <- query[query <= max_times[tmp$tempo[1]]]
       if(length(query) == 0){
         browser()
+        return(NULL)
       }
       messagef("[%s] Cut query from %d to %d (d = %d, t_before = %.3f, tempo = %s)", 
                tid,
@@ -185,7 +188,7 @@ check_rhythm <- function(trial_id, onset_data, stimulus_data, remove_offset = T,
     query <- query - query[1]  
   }
   ref_rhythm <- get_ref_rhythm_for_trial(trial_id, stimulus_data) %>% 
-    mutate(running_beat = (bar -1) * period + (beat -1)  )
+    mutate(running_beat = (bar - 1) * period + (beat - 1)  )
   ref_ibi <- 60/69
   #print(ref_rhythm)
   target <- ref_rhythm %>% pull(onset)
@@ -206,7 +209,7 @@ check_rhythm <- function(trial_id, onset_data, stimulus_data, remove_offset = T,
                           mean_ibi = mean(ibis), 
                           sd_ibi = sd(ibis),
                           ibi_diff = mean_ibi - ref_ibi,
-                          ibi_diff_rel = round(100*(mean_ibi - ref_ibi)/ref_ibi, 1))
+                          ibi_diff_perc = round(100*(mean_ibi - ref_ibi)/ref_ibi, 1))
       #print(tempo_est)
     }
   }
@@ -332,7 +335,7 @@ get_rhythm_features <- function(onset_data, stimulus_data){
     #binding features together
     bind_cols(alignment_features, circ_features, tempo_est)
   }) %>% 
-    select(trial_id, set_id, offset, MAE, MAS, d_n, norm_dist, everything()) %>% 
+    select(trial_id,  offset, MAE, MAS, d_n, norm_dist, everything()) %>% 
     left_join(base_data, by = c("trial_id", "rhythm", "code"))
   
 }

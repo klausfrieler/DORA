@@ -127,25 +127,73 @@ fix_iso_onsets <- function(iso_data, iso_cut_times){
   iso_data <- iso_data %>% 
     left_join(iso_cut_times %>% select(set_id, source, cut_time), by = c("set_id", "source")) %>% 
     mutate(real_onset = onset + cut_time)
+  
   first_onsets <- iso_data %>% 
     filter(source == "ro") %>% 
     group_by(set_id) %>% 
     summarise(first_onset = first(real_onset), .groups = "drop")
+  
+  first_onsets_social <- iso_data %>% 
+    filter(source == "ex", setting == "so") %>% 
+    group_by(set_id) %>% 
+    summarise(first_onset = first(real_onset), .groups = "drop")
+  
+  first_onsets <- bind_rows(first_onsets, first_onsets_social)
+  
   iso_data <- iso_data %>% 
     left_join(first_onsets, by = "set_id") %>% 
-    mutate(onset = case_when(!is.na(first_onset) ~ real_onset - first_onset, T ~ onset)) 
+    mutate(onset = case_when(!is.na(first_onset) ~ real_onset - first_onset, 
+                             T ~ onset)) 
+  
   iso_data <- iso_data %>% 
     mutate(valid_phase = !is.na(first_onset))
   
-  iso_data %>% filter(source != "ro") %>% select(-real_onset, -first_onset)
+  iso_data %>% filter(source != "ro") %>% select(-first_onset)
 }
-post_process <- function(data, data_type = c("onsets", "features"), type = c("iso", "rhythm_prod")){
-  data_type <- match.arg(data_type)
-  type <- match.arg(type)
-  if(type == "iso"){
-    exclude_trials <- data %>% filter(source == "ex", sd_ioi > .05) %>% distinct(trial_id)   
-  }
-  data <- data %>% filter(source != "ex")
+
+# post_process <- function(data, data_type = c("onsets", "features"), type = c("iso", "rhythm_prod")){
+#   data_type <- match.arg(data_type)
+#   type <- match.arg(type)
+#   if(type == "iso"){
+#     exclude_trials <- data %>% filter(source == "ex", sd_ioi > .05) %>% distinct(trial_id)   
+#   }
+#   data <- data %>% filter(source != "ex")
+# }
+
+data_diagnostics <- function(features = iso_features, data = iso_data, cut_times = iso_cut_times){
+  bad_sets1 <- cut_times %>% 
+    group_by(set_id) %>% 
+    summarise(range_cut_times = diff(range(cut_time)), n_set = n(), .groups = "drop") %>% 
+    filter(range_cut_times > 4) 
+  
+  bad_cuts <- iso_cut_times %>% 
+    filter(set_id %in% bad_sets1$set_id) %>% 
+    distinct(set_id, trial_id, cut_time) %>% 
+    select(set_id, trial_id, cut_time)
+  
+  threshold <- boxplot(features$offset)$out %>% abs() %>% min()
+  bad_offsets <- features %>% 
+    filter(abs(offset) >= threshold, !(set_id %in% bad_sets1$set_id)) %>%
+    select(set_id, trial_id, offset, d_n) %>% 
+    left_join(data  %>% 
+                group_by(set_id, tempo) %>%  
+                summarise(d_onsets = diff(range(n_onsets)), .groups = "drop"), by = "set_id") %>% 
+    mutate(missing_events = offset/tempos[tempo]) %>% 
+    mutate(is_okay = abs(d_onsets - missing_events) < 3) %>% 
+    filter(!is_okay)
+  
+  has_doublets <- 
+    iso_data %>% 
+    group_split(set_id) %>% map_dfr(function(data){
+      tmp <- 
+        data %>% 
+          group_by(trial_id) %>% 
+          mutate(onset_check = sprintf("%s_%s_%s", onset[1], onset[2], onset[2])) %>% 
+          ungroup() %>% 
+          distinct(trial_id, onset_check)
+      tibble(set_id = unique(data$set_id), doublet = nrow(tmp) != n_distinct(tmp$onset_check))
+    })  %>% filter(doublet)
+  list(bad_cuts = bad_cuts, bad_offsets = bad_offsets, has_doublets =   has_doublets)
 }
 
 setup_workspace <- function(iso_data_dir = "data/iso", 
@@ -158,7 +206,7 @@ setup_workspace <- function(iso_data_dir = "data/iso",
   
   iso_cut_times <- readxl::read_xlsx("data/meta/cuttimes_audio_iso.xlsx") %>%
     bind_cols(parse_filename(.$file)) %>% 
-    filter(!is.na(cut_time))
+    filter(!is.na(cut_time), !(setting == "so" & source == "ro"))
 
   assign("iso_cut_times", iso_cut_times, globalenv())
   
@@ -167,7 +215,7 @@ setup_workspace <- function(iso_data_dir = "data/iso",
     #browser()
     iso_data <- read_all_files(iso_data_dir)
     saveRDS(iso_data, file.path(iso_data_dir, "iso_data.rds"))
-    
+    assign("iso_data", iso_data, globalenv())
     messagef("Calculating iso features...")
     iso_features <-  get_iso_features(iso_data %>% fix_iso_onsets(iso_cut_times), cut_extra_beats = T) 
     assign("iso_features", iso_features, globalenv())
@@ -181,7 +229,7 @@ setup_workspace <- function(iso_data_dir = "data/iso",
     rhythm_data <- read_all_files(rhythm_data_dir, type = "rhythm_prod")
     saveRDS(rhythm_data, file.path(rhythm_data_dir, "rhythm_data.rds"))
     
-    messagef("Calculating iso features...")
+    messagef("Calculating rhythm features...")
     rhythm_features <-  get_rhythm_features(rhythm_data, stimulus_data) 
     assign("rhythm_features", rhythm_features, globalenv())
     saveRDS(rhythm_features, file.path(rhythm_data_dir, "rhythm_features.rds"))
