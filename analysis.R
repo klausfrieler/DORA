@@ -79,7 +79,8 @@ get_circular_features <- function(onsets, time_base){
          #the other two options correlate highly circular sd
          #circ_var = as.numeric(circular::var.circular(circ_onsets)),
         #circ_disp = circ_var/(2* (1 - circ_var))^2,
-         asynchrony = sign(circ_mean))
+         asynchrony = sign(circ_mean),
+        phase_sec = circ_mean/2/pi * time_base)
 }
 
 
@@ -306,7 +307,7 @@ get_rhythm_features <- function(onset_data, stimulus_data){
     #Attention! Might have non-linear numerical ramifications for different tatums, save tatum and time_base 
     
     circ_features <- get_circular_features(query, time_base) %>% 
-      mutate(division = max(ref_rhythm$division), time_base = time_base)
+      mutate(division = max(ref_rhythm$division), time_base = time_base) 
     
     #get alignmenat features as in the isochronous case.
     best_alignment <-  get_best_alignment(query, target) 
