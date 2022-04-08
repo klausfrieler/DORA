@@ -139,11 +139,11 @@ fix_iso_onsets <- function(iso_data, iso_cut_times){
     summarise(first_onset = first(real_onset), .groups = "drop")
   
   first_onsets <- bind_rows(first_onsets, first_onsets_social)
-  
   iso_data <- iso_data %>% 
     left_join(first_onsets, by = "set_id") %>% 
-    mutate(onset = case_when(!is.na(first_onset) ~ real_onset - first_onset, 
-                             T ~ onset)) 
+    mutate(onset = real_onset - first_onset)
+    # mutate(onset = case_when(!is.na(first_onset) ~ real_onset - first_onset, 
+    #                          T ~ onset)) 
   
   iso_data <- iso_data %>% 
     mutate(valid_phase = !is.na(first_onset))
@@ -171,7 +171,7 @@ data_diagnostics <- function(features = iso_features, data = iso_data, cut_times
     distinct(set_id, trial_id, cut_time) %>% 
     select(set_id, trial_id, cut_time)
   
-  threshold <- boxplot(features$offset)$out %>% abs() %>% min()
+  threshold <- boxplot(features$offset, plot = F)$out %>% abs() %>% min()
   bad_offsets <- features %>% 
     filter(abs(offset) >= threshold, !(set_id %in% bad_sets1$set_id)) %>%
     select(set_id, trial_id, offset, d_n) %>% 
