@@ -292,16 +292,21 @@ get_rhythm_features <- function(onset_data, stimulus_data){
     #find rhythm (class of variants) and code of target rhythm (actual variant of rhythm)
     rhythm <- base_data %>% filter(trial_id == tid) %>% pull(rhythm)
     code <- base_data %>% filter(trial_id == tid) %>%  pull(code)
-    
     #find target rhythm and extract max subdivision for 
     #calculating time_base = tatum duration 
     ref_rhythm <- stimulus_data$rhythms %>% filter(code == !!code)
     time_base <- tempo/max(ref_rhythm$division) 
     
-    #rescale  tempo of reference rhythm (which has  120 bpm)
+    #rescale  tempo of reference rhythm (which has 120 bpm)
     target <- ref_rhythm$onset / .5 * tempo
+    target <- target - target[1]
     
     messagef("[%s] Calculating features with time base = %.3f, division = %d, rhythm code = %s", tid, time_base, max(ref_rhythm$division), code)
+    # if(substr(code, 1,1) == "c"){
+    #   q0 <- plot_dtw_alignment(query, target)
+    #   q1 <- plot_dtw_alignment(query - query[1], target- target[1])
+    #   browser()
+    # }
     
     #Calc cicrcular features beased on tatums, not bsaed on beat an in the isochronous case! 
     #Attention! Might have non-linear numerical ramifications for different tatums, save tatum and time_base 

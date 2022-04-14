@@ -222,6 +222,7 @@ setup_workspace <- function(iso_data_dir = "data/iso",
     saveRDS(iso_features, file.path(iso_data_dir, "iso_features.rds"))
     messagef("Done.")
   }
+  
   if(reread %in% c("rhythm", "all")){
     messagef("Importing all rhythm data from %s", iso_data_dir)
     messagef <- function(...) message(sprintf(...))
