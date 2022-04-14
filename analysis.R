@@ -225,43 +225,18 @@ check_rhythm <- function(trial_id, onset_data = rhythm_data, remove_offset = T, 
   tempo_est 
 }
 
-# get_social_features <- function(onset_data, stimulus_data, type = "rhythm_prod"){
-#   base_data <- onset_data %>%
-#     distinct(experimenter,
-#              age_group,
-#              condition,
-#              source,
-#              rhythm,
-#              setting,
-#              p_id,
-#              trial_id,
-#              n_onsets) %>% 
-#     left_join(stimulus_data$design %>% select(condition = p_id, setting,  rhythm, code),
-#               by = c("condition", "setting", "rhythm"))
-#   
-#   type <- match.arg(type)
-#   data <- onset_data %>% filter(setting == "so")
-#   p_trials <- onset_data %>% filter(source == "pa") %>% pull(trial_id) %>% unique()
-#   map_dfr(p_trials, function(ptid){
-#     x_trial <- onset_data %>% filter(trial_id == str_replace(ptid, "pa", "ex"))
-#     if(nrow(x_trial) == 0){
-#       messagef("No match found for %s", ptid)
-#       return(NULL)
-#     }
-#     ref_rhythm <- stimulus_data$rhythms %>% filter(code == 
-#             base_data %>% filter(trial_id == ptid) %>% pull(code))
-#     query <- onset_data %>% filter(trial_id == ptid)%>% pull(onset)
-#     target <-  x_trial %>% pull(onset)
-#     q <- plot_dtw_alignment(query - query[1], target - target[1])
-#     print(q)
-#     browser()
-#     alignment_features <- get_best_alignment(query - query[1], target - target[1], summary = T) %>%
-#       mutate(trial_id = ptid)
-#     print(alignment_features)
-#     alignment_features
-#   })
-# }
-  
+get_social_features <- function(onset_data = rhythm_data){
+  set_ids <- onset_data %>% filter(setting == "so") %>% distinct(set_id) %>% pull(set_id)
+  map_dfr(set_ids, function(sid){
+    tmp <- onset_data %>% filter(set_id == sid, setting == "so")
+    query <- tmp %>% filter(source == "pa") %>% pull(onset) 
+    target <- tmp %>% filter(source == "ex") %>% pull(onset)
+    best_alignment <-  get_best_alignment(query - query[1], target- target[1]) 
+    best_alignment$summary %>% 
+      mutate(set_id = sid, 
+             trial_id = tmp %>% filter(source == "pa") %>% pull(trial_id) %>% unique())  
+  })
+}
 
 get_rhythm_features <- function(onset_data, stimulus_data){
   base_data <- onset_data %>%
