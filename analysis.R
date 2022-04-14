@@ -182,18 +182,20 @@ get_ref_rhythm_for_trial <- function(trial_id, stimulus_data){
   
 }
 
-check_rhythm <- function(trial_id, onset_data = rhythm_data, stimulus_data = stimulus_data, remove_offset = T, plot = T){
-  #browser()
+check_rhythm <- function(trial_id, onset_data = rhythm_data, remove_offset = T, plot = T){
   query <- onset_data %>% filter(trial_id == !!trial_id) %>% pull(onset)
   if(remove_offset){
     query <- query - query[1]  
   }
-  ref_rhythm <- get_ref_rhythm_for_trial(trial_id, stimulus_data) %>% 
+  ref_rhythm <- get_ref_rhythm_for_trial(trial_id, stimulus_data) %>%
     mutate(running_beat = (bar - 1) * period + (beat - 1)  )
   ref_ibi <- 60/69
   #print(ref_rhythm)
   target <- ref_rhythm %>% pull(onset)
   target <- target/.5 * ref_ibi 
+  if(remove_offset){
+    target <- target - target[1]
+  }
   query_norm <- query/ref_ibi * .5
   #print(query_norm)
   ba <- get_best_alignment(query, target)
@@ -217,6 +219,7 @@ check_rhythm <- function(trial_id, onset_data = rhythm_data, stimulus_data = sti
   if(plot){
     q <- plot_dtw_alignment(query, target) + scale_x_continuous(breaks = round(seq(1:3) * ref_ibi, 3), labels = 1:3)
     print(q)
+    #browser()
   }
   #browser()
   tempo_est 
@@ -307,7 +310,9 @@ get_rhythm_features <- function(onset_data, stimulus_data){
     #   q1 <- plot_dtw_alignment(query - query[1], target- target[1])
     #   browser()
     # }
-    
+    if(tid == "w_7_10_01_pa_vii_so"){
+      browser()
+    }
     #Calc cicrcular features beased on tatums, not bsaed on beat an in the isochronous case! 
     #Attention! Might have non-linear numerical ramifications for different tatums, save tatum and time_base 
     

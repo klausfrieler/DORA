@@ -160,7 +160,7 @@ fix_iso_onsets <- function(iso_data, iso_cut_times){
 #   data <- data %>% filter(source != "ex")
 # }
 
-data_diagnostics <- function(features = iso_features, data = iso_data, cut_times = iso_cut_times){
+iso_data_diagnostics <- function(features = iso_features, data = iso_data, cut_times = iso_cut_times){
   bad_sets1 <- cut_times %>% 
     group_by(set_id) %>% 
     summarise(range_cut_times = diff(range(cut_time)), n_set = n(), .groups = "drop") %>% 
@@ -196,6 +196,26 @@ data_diagnostics <- function(features = iso_features, data = iso_data, cut_times
   list(bad_cuts = bad_cuts, bad_offsets = bad_offsets, has_doublets =   has_doublets)
 }
 
+get_outliers <- function(x, values = F){
+  bp <- boxplot(x, plot = F)$out
+  if(values){
+    x[which(x %in% bp)]
+  }
+  else{
+    which(x %in% bp)
+  }
+}
+  
+rhythm_data_diagnostics <- function(features = rhythm_features, data = rhythm_data){
+  foi <- c("norm_dist", "ibi_diff_perc", "circ_sd", "sd_ibi")
+  map_dfr(foi, function(feat){
+    out <- get_outliers(features[[feat]])
+    tibble(trial_id = features[out, ]$trial_id, feature = feat)
+  })  %>% 
+    group_by(trial_id) %>% 
+    summarise(n = n(), features = paste(feature, collapse = ",")) %>% 
+    ungroup() 
+}
 setup_workspace <- function(iso_data_dir = "data/iso", 
                             rhythm_data_dir = "data/rhythm_prod", 
                             reread = c("all", "iso", "rhythm", "none")){
