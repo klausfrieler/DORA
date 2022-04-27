@@ -155,7 +155,9 @@ get_iso_features <- function(onset_data, cut_extra_beats = T){
     #shift
     # query_shifted <-  query - (offset - offset %% time_base)
     # iso_env_shifted <- iso_env[iso_env <= max(query_shifted)]
-    
+    if(tid == "l_e_08_02_pa_sl_so"){
+      browser()
+    }
     best_aligment <- get_best_alignment(query, iso_env)
     alignment_features <-  best_aligment$summary %>% 
       mutate(trial_id = tid, 
@@ -325,3 +327,130 @@ get_rhythm_features <- function(onset_data, stimulus_data){
     left_join(base_data, by = c("trial_id", "rhythm", "code"))
   
 }
+
+broom_watson_two_test <- function(wtt, alpha = 0){
+  u2 <- wtt$statistic
+  if (u2 > 0.385){
+    p_low <- 0
+    p_hi <- 0.001
+  } 
+  else if (u2 > 0.268) {
+    p_low <- .001
+    p_hi <- 0.01
+  }
+  else if (u2 > 0.187) {
+    p_low <- .01
+    p_hi <- 0.05
+  }
+  else if (u2 > 0.152) {
+    p_low <- .05
+    p_hi <- 0.1
+  }
+  else{
+    p_low <- .1
+    p_hi <- 1.
+  }
+  tibble(statistic = u2, p_low = p_low, p_hi = p_hi, n1 = wtt$nx, n2 = wtt$ny, 
+         circ_mean1 = wtt$mean1, circ_mean2 = wtt$mean2)
+}
+
+watson_two_test_by_list <- function(vl, alpha = 0){
+  stopifnot(is.list(vl), length(vl) == 2)
+  wtt <- circular::watson.two.test(circular(vl[[1]]), circular(vl[[2]]), alpha = alpha)
+  wtt$mean1 <- as.numeric(median.circular(circular(vl[[1]])))
+  wtt$mean2 <- as.numeric(median.circular(circular(vl[[2]])))
+  wtt
+}
+
+watson_two_test_by_split <- function(data, split_var, alpha = 0){
+  data %>% 
+    group_split(!!sym(split_var)) %>% 
+    map(function(x){
+      x %>%  pull(circ_mean)
+    }) %>% 
+    watson_two_test_by_list(alpha = alpha) %>% 
+    broom_watson_two_test()
+} 
+
+convert_phase_to_abs_time <- function(circ_mean, tempo, comp = 1){
+  if(any(is.na(tempo))){
+    return(NA)
+  }
+  browser()
+  tempo <- map_chr(str_split(tempo, "-"), ~{if(length(.x) >= comp) .x[[comp]] else .x[[1]]})
+  circ_mean/2/pi * tempos[tempo]
+}
+
+lot_of_watsons <- function(data = iso_features %>% filter(source != "ex"), alpha = 0){
+  age_groups <- unique(data$age_group)
+  tempos <- unique(data$tempo)
+  settings <- unique(data$setting)
+  data <- data %>% 
+    group_by(age_group, setting, tempo, p_id) %>% 
+    summarise(circ_mean = mean.circular(circular(circ_mean)), .groups = "drop")
+  
+  omnibus <- bind_rows(
+    w_setting <- watson_two_test_by_split(data, "setting") %>% 
+      mutate(comp = "setting", age_group = NA, tempo = NA, setting = "ac-so"),
+    w_age_group <- watson_two_test_by_split(data, "age_group")%>% 
+      mutate(comp = "age_group", setting = NA, tempo = NA, age_group = "7-e"),
+    w_tempo <- watson_two_test_by_split(data, "tempo") %>% 
+      mutate(comp = "tempo", age_group = NA, setting = NA, tempo = "fa-sl")
+  )
+  map_dfr(age_groups, function(a){
+    map_dfr(tempos, function(t){
+      map_dfr(settings, function(s){
+        w_setting <- watson_two_test_by_split(data %>% filter(age_group == a, tempo == t), "setting") %>% 
+          mutate(comp = "setting", age_group = a, tempo = t, setting = "ac-so")
+        w_age_group <- watson_two_test_by_split(data %>% filter(setting == s, tempo == t), "age_group")%>% 
+          mutate(comp = "age_group", setting = s, tempo = t, age_group = "7-e")
+        w_tempo <- watson_two_test_by_split(data %>% filter(age_group == a, setting == s), "tempo") %>% 
+          mutate(comp = "tempo", age_group = a, setting = s, tempo = "fa-sl")
+        bind_rows(w_setting, w_age_group, w_tempo) 
+      })
+    })
+  }) %>% 
+    arrange(comp) %>% 
+    distinct(age_group, tempo, setting, .keep_all = T) %>% 
+    mutate(async1_ms = round(1000 * convert_phase_to_abs_time(circ_mean1, tempo, 1), 0),
+           async2_ms = round(1000 * convert_phase_to_abs_time(circ_mean2, tempo, 2), 0)) %>% 
+    bind_rows(omnibus) 
+}
+
+multi_polar_hist <- function(data){
+  data <- data %>% 
+    mutate(setting = c("ac" = "Drum King", so = "Social")[setting], 
+           age_group = c("7" = "7-year olds", "e" = "Adults")[age_group], 
+           tempo = c("fa" = "Fast (400 ms)", "sl" = "Slow (600 ms)")[tempo])
+  sum_data <- data %>% 
+    group_by(age_group, tempo, setting) %>% 
+    summarise(m_circ_mean = mean.circular(circular(circ_mean)), 
+              r_circ_mean = rho.circular(circular(circ_mean)), 
+              .groups = "drop")
+  
+  q <- data %>% ggplot(aes(x = circ_mean, y = ..density.., fill = age_group)) 
+  q <- q + geom_histogram(alpha = .25, color = "grey50") 
+  q <- q + geom_segment(data = sum_data, 
+                        aes(x = m_circ_mean, 
+                            xend = m_circ_mean, 
+                            y = 0, 
+                            yend = 3*r_circ_mean, 
+                            colour = age_group),
+                        linetype = "solid",
+                        arrow = arrow(length = unit(0.25, "cm")), size = 1)
+  q <- q + coord_polar(direction = 1, start = -pi/2 - .1) 
+  q <- q + facet_grid(tempo ~ setting) 
+  q <- q + scale_x_continuous(breaks = seq(-pi, pi, pi/2), labels = expression(-pi, -pi/2, 0, pi/2, pi)) 
+  q <- q + theme_bw() 
+  q <- q + theme(strip.background  = element_rect(fill = "white"), 
+                 legend.title =  element_blank(),
+                 legend.position = c(.5, .5),
+                 legend.background  = element_rect(colour = "black", fill = "#ffffff"),
+                 panel.grid.major.y  = element_blank())
+  q <- q + labs(x = "Mean Phase (rad)", y = "Density") 
+  q <- q + scale_fill_manual(values = c("darkorange", "darkred"))
+  q <- q + scale_color_manual(values = c("darkorange", "darkred"))
+  
+  
+  q
+} 

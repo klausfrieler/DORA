@@ -123,7 +123,7 @@ setup_rhythm_data <- function(rhythm_stim_dir = "data/meta/stimulus_rhythms/",
 }
 
 fix_iso_onsets <- function(iso_data, iso_cut_times){
-  #browser()
+  browser()
   iso_data <- iso_data %>% 
     left_join(iso_cut_times %>% select(set_id, source, cut_time), by = c("set_id", "source")) %>% 
     mutate(real_onset = onset + cut_time)
@@ -258,16 +258,19 @@ setup_workspace <- function(iso_data_dir = "data/iso",
     messagef("Done.")
     
   }
-  if(reread == "none"){
+  if(reread %in%  c("rhythm", "none")){
     messagef("Reading iso data")
     iso_data <- readRDS(file.path(iso_data_dir, "iso_data.rds"))
     iso_features <- readRDS(file.path(iso_data_dir, "iso_features.rds"))
     
+  }
+    
+  if(reread %in%  c("iso", "none")){
     messagef("Reading rhythm data")
     rhythm_data <- readRDS(file.path(rhythm_data_dir, "rhythm_data.rds"))
     rhythm_features <- readRDS(file.path(rhythm_data_dir, "rhythm_features.rds"))
-    
   }
+  
   assign("iso_data", iso_data, globalenv())
   assign("rhythm_data", rhythm_data, globalenv())
   assign("iso_features", iso_features, globalenv())
