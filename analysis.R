@@ -376,7 +376,6 @@ convert_phase_to_abs_time <- function(circ_mean, tempo, comp = 1){
   if(any(is.na(tempo))){
     return(NA)
   }
-  browser()
   tempo <- map_chr(str_split(tempo, "-"), ~{if(length(.x) >= comp) .x[[comp]] else .x[[1]]})
   circ_mean/2/pi * tempos[tempo]
 }
