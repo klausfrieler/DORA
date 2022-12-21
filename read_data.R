@@ -148,7 +148,7 @@ fix_iso_onsets <- function(iso_data, iso_cut_times){
   iso_data <- iso_data %>% 
     mutate(valid_phase = !is.na(first_onset))
   
-  iso_data %>% filter(source != "ro") %>% select(-first_onset)
+  iso_data %>% filter(source != "ro") %>% select(-first_onset) %>% filter(!is.na(onset))
 }
 
 # post_process <- function(data, data_type = c("onsets", "features"), type = c("iso", "rhythm_prod")){
@@ -218,6 +218,7 @@ rhythm_data_diagnostics <- function(features = rhythm_features, data = rhythm_da
 }
 
 setup_workspace <- function(iso_data_dir = "data/iso", 
+                            meta_data_dir = "data/meta",
                             rhythm_data_dir = "data/rhythm_prod", 
                             reread = c("all", "iso", "rhythm", "none")){
   reread <- match.arg(reread) 
@@ -225,7 +226,7 @@ setup_workspace <- function(iso_data_dir = "data/iso",
   stimulus_data <- setup_rhythm_data()
   assign("stimulus_data", stimulus_data, globalenv())
   
-  iso_cut_times <- readxl::read_xlsx("data/meta/cuttimes_audio_iso.xlsx") %>%
+  iso_cut_times <- readxl::read_xlsx(file.path(meta_data_dir, "cuttimes_audio_iso.xlsx")) %>%
     bind_cols(parse_filename(.$file)) %>% 
     filter(!is.na(cut_time), !(setting == "so" & source == "ro"))
 
@@ -259,14 +260,14 @@ setup_workspace <- function(iso_data_dir = "data/iso",
     
   }
   if(reread %in%  c("rhythm", "none")){
-    messagef("Reading iso data")
+    messagef("Reading rhythm data")
     iso_data <- readRDS(file.path(iso_data_dir, "iso_data.rds"))
     iso_features <- readRDS(file.path(iso_data_dir, "iso_features.rds"))
     
   }
     
   if(reread %in%  c("iso", "none")){
-    messagef("Reading rhythm data")
+    messagef("Reading iso data")
     rhythm_data <- readRDS(file.path(rhythm_data_dir, "rhythm_data.rds"))
     rhythm_features <- readRDS(file.path(rhythm_data_dir, "rhythm_features.rds"))
   }

@@ -130,7 +130,6 @@ get_iso_features <- function(onset_data, cut_extra_beats = T){
     
     #if requested, disregard beats beyond the maximum time of the trials, as participant sometime simple played on
     if(cut_extra_beats){
-      #browser()
       n_before <- length(query)
       mt_before <- max(query)
       query <- query[query <= max_times[tmp$tempo[1]]]
@@ -387,30 +386,31 @@ lot_of_watsons <- function(data = iso_features %>% filter(source != "ex"), alpha
   data <- data %>% 
     group_by(age_group, setting, tempo, p_id) %>% 
     summarise(circ_mean = mean.circular(circular(circ_mean)), .groups = "drop")
-  
+  data <- data %>% mutate(is_adult = age_group == "e" )  
+  browser()
   omnibus <- bind_rows(
     w_setting <- watson_two_test_by_split(data, "setting") %>% 
       mutate(comp = "setting", age_group = NA, tempo = NA, setting = "ac-so"),
-    w_age_group <- watson_two_test_by_split(data, "age_group")%>% 
-      mutate(comp = "age_group", setting = NA, tempo = NA, age_group = "7-e"),
+    w_age_group <- watson_two_test_by_split(data, "is_adult")%>% 
+      mutate(comp = "is_adult", setting = NA, tempo = NA, age_group = "k-e"),
     w_tempo <- watson_two_test_by_split(data, "tempo") %>% 
       mutate(comp = "tempo", age_group = NA, setting = NA, tempo = "fa-sl")
   )
-  map_dfr(age_groups, function(a){
+  map_dfr(unique(data$is_adult), function(a){
     map_dfr(tempos, function(t){
       map_dfr(settings, function(s){
-        w_setting <- watson_two_test_by_split(data %>% filter(age_group == a, tempo == t), "setting") %>% 
-          mutate(comp = "setting", age_group = a, tempo = t, setting = "ac-so")
-        w_age_group <- watson_two_test_by_split(data %>% filter(setting == s, tempo == t), "age_group")%>% 
-          mutate(comp = "age_group", setting = s, tempo = t, age_group = "7-e")
-        w_tempo <- watson_two_test_by_split(data %>% filter(age_group == a, setting == s), "tempo") %>% 
-          mutate(comp = "tempo", age_group = a, setting = s, tempo = "fa-sl")
+        w_setting <- watson_two_test_by_split(data %>% filter(is_adult == a, tempo == t), "setting") %>% 
+          mutate(comp = "setting", is_adult = a, tempo = t, setting = "ac-so")
+        w_age_group <- watson_two_test_by_split(data %>% filter(setting == s, tempo == t), "is_adult")%>% 
+          mutate(comp = "is_adult", setting = s, tempo = t, age_group = "k-e")
+        w_tempo <- watson_two_test_by_split(data %>% filter(is_adult == a, setting == s), "tempo") %>% 
+          mutate(comp = "tempo", is_adult = a, setting = s, tempo = "fa-sl")
         bind_rows(w_setting, w_age_group, w_tempo) 
       })
     })
   }) %>% 
     arrange(comp) %>% 
-    distinct(age_group, tempo, setting, .keep_all = T) %>% 
+    distinct(is_adult, tempo, setting, .keep_all = T) %>% 
     mutate(async1_ms = round(1000 * convert_phase_to_abs_time(circ_mean1, tempo, 1), 0),
            async2_ms = round(1000 * convert_phase_to_abs_time(circ_mean2, tempo, 2), 0)) %>% 
     bind_rows(omnibus) 
@@ -419,7 +419,11 @@ lot_of_watsons <- function(data = iso_features %>% filter(source != "ex"), alpha
 multi_polar_hist <- function(data){
   data <- data %>% 
     mutate(setting = c("ac" = "Drum King", so = "Social")[setting], 
-           age_group = c("7" = "7-year olds", "e" = "Adults")[age_group], 
+           age_group = c("5" = "5-year olds", 
+                         "6" = "6-year olds", 
+                         "7" = "7-year olds", 
+                         "8" = "8-year olds", 
+                         "e" = "Adults")[age_group], 
            tempo = c("fa" = "Fast (400 ms)", "sl" = "Slow (600 ms)")[tempo])
   sum_data <- data %>% 
     group_by(age_group, tempo, setting) %>% 
@@ -447,8 +451,8 @@ multi_polar_hist <- function(data){
                  legend.background  = element_rect(colour = "black", fill = "#ffffff"),
                  panel.grid.major.y  = element_blank())
   q <- q + labs(x = "Mean Phase (rad)", y = "Density") 
-  q <- q + scale_fill_manual(values = c("darkorange", "darkred"))
-  q <- q + scale_color_manual(values = c("darkorange", "darkred"))
+  q <- q + scale_fill_manual(values = c("darkorange", "darkred", "darkblue", "darkgreen", "darkviolet"))
+  q <- q + scale_color_manual(values = c("darkorange", "darkred", "darkblue", "darkgreen", "darkviolet"))
   
   
   q
