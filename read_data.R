@@ -18,7 +18,7 @@ parse_filename <- function(fname, type = c("iso", "rhythm_prod", "rhythm_def")){
              source = x[5],
              tempo = x[6],
              setting = x[7],
-             p_id = paste(x[1:3], collapse = "_"),
+             p_id = paste(x[1:4], collapse = "_"),
              trial_id = paste(x, collapse = "_"),
              set_id = paste(experimenter, age_group, condition, serial, tempo, setting, sep = "_")
              )
@@ -33,7 +33,7 @@ parse_filename <- function(fname, type = c("iso", "rhythm_prod", "rhythm_def")){
              source = x[5],
              rhythm = x[6],
              setting = x[7],
-             p_id = paste(x[1:3], collapse = "_"),
+             p_id = paste(x[1:4], collapse = "_"),
              set_id = paste(experimenter, age_group, condition, serial, rhythm, setting, sep = "_"),
              trial_id = paste(x, collapse = "_"))
       })
@@ -85,10 +85,10 @@ read_all_files <- function(data_dir, type = c("iso", "rhythm_prod")){
 }
 
 setup_rhythm_data <- function(rhythm_stim_dir = "data/meta/stimulus_rhythms/", 
-                              fname_design = "data/meta/experimental_design_rhythm_simple.csv"){
+                              fname_design = "data/meta/experimental_design_rhythm_simple_mod.csv"){
   rhythm_design = read.csv(fname_design, sep = ";", stringsAsFactors = F) %>% 
     as_tibble() 
-  
+  #browser()
   patch_rhythms <- rhythm_design %>% 
     group_by(rhythm) %>% 
     mutate(has_na = any(is.na(code))) %>% 
@@ -99,9 +99,9 @@ setup_rhythm_data <- function(rhythm_stim_dir = "data/meta/stimulus_rhythms/",
   rhythm_design <- rhythm_design %>% left_join(patch_rhythms, by = "rhythm")
   rhythm_design[is.na(rhythm_design$code),]$code <- rhythm_design[is.na(rhythm_design$code),]$patch_code
   rhythm_design <- rhythm_design %>% 
-    filter(modality %in% c(2,5)) %>% 
+    #filter(modality %in% c(2,5)) %>% 
     mutate(p_id = sprintf("%02d", p_id),
-           setting = factor(modality, levels = c(2, 5), labels = c("ac", "so")),
+           setting = factor(modality, levels = c(1:5), labels = c("ta", "vo", "cl", "ac", "so")),
            rhythm = factor(rhythm,
                            levels = 1:10,
                            labels = c('i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix', 'x'))) %>%
@@ -123,7 +123,7 @@ setup_rhythm_data <- function(rhythm_stim_dir = "data/meta/stimulus_rhythms/",
 }
 
 fix_iso_onsets <- function(iso_data, iso_cut_times){
-  browser()
+  #browser()
   iso_data <- iso_data %>% 
     left_join(iso_cut_times %>% select(set_id, source, cut_time), by = c("set_id", "source")) %>% 
     mutate(real_onset = onset + cut_time)
@@ -217,9 +217,9 @@ rhythm_data_diagnostics <- function(features = rhythm_features, data = rhythm_da
     ungroup() 
 }
 
-setup_workspace <- function(iso_data_dir = "data/iso", 
-                            meta_data_dir = "data/meta",
-                            rhythm_data_dir = "data/rhythm_prod", 
+setup_workspace <- function(iso_data_dir = "data/drumking_final/iso", 
+                            meta_data_dir = "data/drumking_final/meta",
+                            rhythm_data_dir = "data/rhythm_prod/onsets", 
                             reread = c("all", "iso", "rhythm", "none")){
   reread <- match.arg(reread) 
   messagef("Reading stimulus and design data")
@@ -246,7 +246,7 @@ setup_workspace <- function(iso_data_dir = "data/iso",
   }
   
   if(reread %in% c("rhythm", "all")){
-    messagef("Importing all rhythm data from %s", iso_data_dir)
+    messagef("Importing all rhythm data from %s", rhythm_data_dir)
     messagef <- function(...) message(sprintf(...))
     
     rhythm_data <- read_all_files(rhythm_data_dir, type = "rhythm_prod")
@@ -268,7 +268,7 @@ setup_workspace <- function(iso_data_dir = "data/iso",
     
   if(reread %in%  c("iso", "none")){
     messagef("Reading iso data")
-    rhythm_data <- readRDS(file.path(rhythm_data_dir, "rhythm_data.rds"))
+    # rhythm_data <- readRDS(file.path(rhythm_data_dir, "rhythm_data.rds"))
     rhythm_features <- readRDS(file.path(rhythm_data_dir, "rhythm_features.rds"))
   }
   
