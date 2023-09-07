@@ -3,6 +3,16 @@ source("analysis.R")
 source("dtw_util.R")
 
 messagef <- function(...) message(sprintf(...))
+bad_trials <- c('l_e_03_01_pa_fa_ac', 
+                'l_e_03_01_pa_fa_so', 
+                'l_e_03_01_pa_sl_ac', 
+                'l_e_03_01_pa_sl_so', 
+                'w_5_24_01_pa_fa_so', 
+                'w_5_24_01_pa_sl_so', 
+                'w_7_02_01_pa_fa_ac', 
+                'w_7_02_01_pa_fa_so', 
+                'w_7_02_01_pa_sl_ac', 
+                'w_7_02_01_pa_sl_so')
 
 parse_filename <- function(fname, type = c("iso", "rhythm_prod", "rhythm_def")){
   type <- match.arg(type)
@@ -265,7 +275,26 @@ setup_workspace <- function(iso_data_dir = "data/iso",
     iso_features <- readRDS(file.path(iso_data_dir, "iso_features.rds"))
     
   }
-    
+  #add beat perception and beat production data
+  metadata <- readRDS("data/meta/metadata_minimal.rds") 
+  iso_features<- iso_features %>% left_join(dataset_dora %>% select(p_id, beat_prod, beat_perc), by = "p_id") 
+  iso_features <- iso_features %>% mutate(age_group = factor(age_group, ordered = T))
+  
+  #Set set adults as reference group
+  contrasts(iso_features$age_group) <- contr.SAS(n = 5)
+  
+  #Remove experimenter data
+  iso_features = iso_features %>% filter(source != 'ex')
+  #Remove  bad trials
+  iso_features = iso_features %>% filter(!(trial_id %in% bad_trials))
+  #some more featture, tempo dev, tempo_abs_dev and log_tempo_abs_dev
+  
+  iso_features <- iso_features %>% 
+    mutate(tempo_num = c("fa" = .4, "sl" = .6)[tempo]) %>% 
+    mutate(tempo_dev = (med_ioi - tempo_num), 
+           tempo_abs_dev = abs(tempo_dev), 
+           log_tempo_abs_dev = log(tempo_abs_dev))
+  
   # if(reread %in%  c("iso", "none")){
   #   messagef("Reading rhythm data")
   #   # rhythm_data <- readRDS(file.path(rhythm_data_dir, "rhythm_data.rds"))
