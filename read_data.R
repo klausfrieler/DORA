@@ -217,10 +217,10 @@ rhythm_data_diagnostics <- function(features = rhythm_features, data = rhythm_da
     ungroup() 
 }
 
-setup_workspace <- function(iso_data_dir = "data/drumking_final/iso", 
-                            meta_data_dir = "data/drumking_final/meta",
+setup_workspace <- function(iso_data_dir = "data/iso", 
+                            meta_data_dir = "data/meta",
                             rhythm_data_dir = "data/rhythm_prod/onsets", 
-                            reread = c("all", "iso", "rhythm", "none")){
+                            reread = c("none", "iso")){
   reread <- match.arg(reread) 
   messagef("Reading stimulus and design data")
   stimulus_data <- setup_rhythm_data()
@@ -245,32 +245,32 @@ setup_workspace <- function(iso_data_dir = "data/drumking_final/iso",
     messagef("Done.")
   }
   
-  if(reread %in% c("rhythm", "all")){
-    messagef("Importing all rhythm data from %s", rhythm_data_dir)
-    messagef <- function(...) message(sprintf(...))
-    
-    rhythm_data <- read_all_files(rhythm_data_dir, type = "rhythm_prod")
-    saveRDS(rhythm_data, file.path(rhythm_data_dir, "rhythm_data.rds"))
-    
-    messagef("Calculating rhythm features...")
-    rhythm_features <-  get_rhythm_features(rhythm_data, stimulus_data) 
-    assign("rhythm_features", rhythm_features, globalenv())
-    saveRDS(rhythm_features, file.path(rhythm_data_dir, "rhythm_features.rds"))
-    messagef("Done.")
-    
-  }
+  # if(reread %in% c("rhythm", "all")){
+  #   messagef("Importing all rhythm data from %s", rhythm_data_dir)
+  #   messagef <- function(...) message(sprintf(...))
+  #   
+  #   rhythm_data <- read_all_files(rhythm_data_dir, type = "rhythm_prod")
+  #   saveRDS(rhythm_data, file.path(rhythm_data_dir, "rhythm_data.rds"))
+  #   
+  #   messagef("Calculating rhythm features...")
+  #   rhythm_features <-  get_rhythm_features(rhythm_data, stimulus_data) 
+  #   assign("rhythm_features", rhythm_features, globalenv())
+  #   saveRDS(rhythm_features, file.path(rhythm_data_dir, "rhythm_features.rds"))
+  #   messagef("Done.")
+  #   
+  # }
   if(reread %in%  c("rhythm", "none")){
-    messagef("Reading rhythm data")
+    messagef("Reading iso data")
     iso_data <- readRDS(file.path(iso_data_dir, "iso_data.rds"))
     iso_features <- readRDS(file.path(iso_data_dir, "iso_features.rds"))
     
   }
     
-  if(reread %in%  c("iso", "none")){
-    messagef("Reading iso data")
-    # rhythm_data <- readRDS(file.path(rhythm_data_dir, "rhythm_data.rds"))
-    rhythm_features <- readRDS(file.path(rhythm_data_dir, "rhythm_features.rds"))
-  }
+  # if(reread %in%  c("iso", "none")){
+  #   messagef("Reading rhythm data")
+  #   # rhythm_data <- readRDS(file.path(rhythm_data_dir, "rhythm_data.rds"))
+  #   rhythm_features <- readRDS(file.path(rhythm_data_dir, "rhythm_features.rds"))
+  # }
   
   assign("iso_data", iso_data, globalenv())
   assign("rhythm_data", rhythm_data, globalenv())

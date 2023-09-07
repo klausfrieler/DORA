@@ -50,7 +50,8 @@ get_best_alignment <- function(query, target){
              target = target[target_best], 
              d = best[1])
   })
-  # MAE mean absolute error; mean of absolute differences between query time points and best target timepoints
+  
+  # MAE mean absolute error; mean of absolute dIntermediate statewm-ifferences between query time points and best target timepoints
   # MAS mean absolute error stddev; Sd of absolute differences between query time points and best target timepoints
   # norm_dist: normaliized DTW distance
   # d_n: difference in length between target and query, if positive, query contains *more* events than target
@@ -227,8 +228,10 @@ check_rhythm <- function(trial_id, onset_data = rhythm_data, remove_offset = T, 
 }
 
 get_social_features <- function(onset_data = rhythm_data){
+  #browser()
   set_ids <- onset_data %>% filter(setting == "so") %>% distinct(set_id) %>% pull(set_id)
   map_dfr(set_ids, function(sid){
+    #browser()
     tmp <- onset_data %>% filter(set_id == sid, setting == "so")
     query <- tmp %>% filter(source == "pa") %>% pull(onset) 
     target <- tmp %>% filter(source == "ex") %>% pull(onset)
@@ -237,6 +240,18 @@ get_social_features <- function(onset_data = rhythm_data){
       mutate(set_id = sid, 
              trial_id = tmp %>% filter(source == "pa") %>% pull(trial_id) %>% unique())  
   })
+}
+
+add_social_features <- function(rhythm_features, social_features, setting_name = "so2"){
+  tmp <- rhythm_features %>% filter(trial_id %in% social_features$trial_id)  
+  missing_variables <- c("trial_id", setdiff(names(tmp), names(social_features)))
+  social_features <- social_features %>% 
+    left_join(
+      tmp %>% 
+        select(all_of(missing_variables)), 
+      by = "trial_id") %>% 
+    mutate(setting = setting_name)
+ bind_rows(rhythm_features, social_features)
 }
 
 get_rhythm_features <- function(onset_data, stimulus_data){
@@ -253,7 +268,7 @@ get_rhythm_features <- function(onset_data, stimulus_data){
              n_onsets) %>% 
     left_join(stimulus_data$design %>% select(condition = p_id, setting,  rhythm, code),
               by = c("condition", "setting", "rhythm"))
-  
+  #browser()
   tids <- unique(base_data$trial_id)
   
   #tempo was the same in all trials
@@ -261,13 +276,15 @@ get_rhythm_features <- function(onset_data, stimulus_data){
   
   map_dfr(tids, function(tid){
     #get query data
+    messagef("[%s] Processing...", tid)
+    
     tmp <- onset_data %>% filter(trial_id == tid) 
     query <- tmp %>% pull(onset)
     offset <- query[1]
     
     #as production task was serial, absolute phase is of no interest, so remove offset 
     query <- query - offset
-    
+    #browser()
     #find rhythm (class of variants) and code of target rhythm (actual variant of rhythm)
     rhythm <- base_data %>% filter(trial_id == tid) %>% pull(rhythm)
     code <- base_data %>% filter(trial_id == tid) %>%  pull(code)
@@ -279,23 +296,23 @@ get_rhythm_features <- function(onset_data, stimulus_data){
     #rescale  tempo of reference rhythm (which has 120 bpm)
     target <- ref_rhythm$onset / .5 * tempo
     target <- target - target[1]
+    # if(tid == "W_6_01_02_ro_vii-cl_onsets"){
+    #   browser()
+    # }
     
-    messagef("[%s] Calculating features with time base = %.3f, division = %d, rhythm code = %s", tid, time_base, max(ref_rhythm$division), code)
+    #messagef("[%s] Calculating features with time base = %.3f, division = %d, rhythm code = %s", tid, time_base, max(ref_rhythm$division), code)
     # if(substr(code, 1,1) == "c"){
     #   q0 <- plot_dtw_alignment(query, target)
     #   q1 <- plot_dtw_alignment(query - query[1], target- target[1])
     #   browser()
     # }
-    if(tid == "w_7_10_01_pa_vii_so"){
-      browser()
-    }
     #Calc cicrcular features beased on tatums, not bsaed on beat an in the isochronous case! 
     #Attention! Might have non-linear numerical ramifications for different tatums, save tatum and time_base 
     
     circ_features <- get_circular_features(query, time_base) %>% 
       mutate(division = max(ref_rhythm$division), time_base = time_base) 
     
-    #get alignmenat features as in the isochronous case.
+    #get alignment features as in the isochronuous case.
     best_alignment <-  get_best_alignment(query, target) 
                                               
     alignment_features <- best_alignment$summary %>%
@@ -416,6 +433,74 @@ lot_of_watsons <- function(data = iso_features %>% filter(source != "ex"), alpha
     bind_rows(omnibus) 
 }
 
+comp_ages_watson <- function(data, setting = NULL, tempo = NULL){
+  if(!is.null(setting)){
+    data <- data %>% filter(setting == !!setting)
+  }
+  else{
+    setting <- NA
+  }
+  if(!is.null(tempo)){
+    data <- data %>% filter(tempo == !!tempo)
+  }
+  else{
+    tempo <- NA
+  }
+  ag <- unique(data$age_group) %>% sort()
+  map_dfr(ag, function(x){
+    map_dfr(ag, function(y){
+      if(y >= x){
+        return(NULL)
+      } 
+      messagef("Comparing %s <-> %s", x, y)
+      w_age_group <- watson_two_test_by_split(data %>% filter(age_group %in% c(x, y)), "age_group")%>% 
+        mutate(comp = "age_group", setting = setting, tempo = tempo, age_group = sprintf("%s-%s", y, x))
+      
+    })
+  })  
+}
+more_watsons <- function(data = iso_features %>% filter(source != "ex"), alpha = 0){
+  age_groups <- unique(data$age_group) %>% sort()
+  tempos <- unique(data$tempo) %>% sort()
+  settings <- unique(data$setting) %>% sort()
+  data <- data %>% filter(source != "ex")
+  browser()
+  # data <- data %>% 
+  #   group_by(age_group, setting, tempo, p_id) %>% 
+  #   summarise(circ_mean = mean.circular(circular(circ_mean)), .groups = "drop")
+  omnibus <- bind_rows(
+    w_setting <- watson_two_test_by_split(data, "setting") %>% 
+      mutate(comp = "setting", age_group = NA, tempo = NA, setting = "ac-so"),
+    w_age_group <- comp_ages_watson(data)%>% 
+      mutate(comp = "age_group"),
+    w_tempo <- watson_two_test_by_split(data, "tempo") %>% 
+      mutate(comp = "tempo", age_group = NA, setting = NA, tempo = "fa-sl")
+  ) %>% 
+    mutate(type = "omnibus")
+  
+  browser()
+  map_dfr(tempos, function(t){
+    map_dfr(settings, function(s){
+      w_s_t <- 
+        map_dfr(age_groups, function(a){
+          w_setting <- watson_two_test_by_split(data %>% filter(age_group == a, tempo == t), "setting") %>% 
+            mutate(comp = "setting", age_group = a, tempo = t, setting = "ac-so")
+          w_tempo <- watson_two_test_by_split(data %>% filter(age_group == a, setting == s), "tempo") %>% 
+            mutate(comp = "tempo", age_group = a, setting = s, tempo = "fa-sl")
+        bind_rows(w_setting, w_tempo) 
+      })
+      w_age_group <- comp_ages_watson(data, setting = s, tempo = t)
+      bind_rows(w_s_t, w_age_group)
+    })
+  }) %>% 
+    arrange(comp, age_group, setting, tempo) %>% 
+    distinct(age_group, tempo, setting, .keep_all = T) %>% 
+    mutate(type = "single", 
+           async1_ms = round(1000 * convert_phase_to_abs_time(circ_mean1, tempo, 1), 0),
+           async2_ms = round(1000 * convert_phase_to_abs_time(circ_mean2, tempo, 2), 0)) %>% 
+    bind_rows(omnibus) 
+}
+
 multi_polar_hist <- function(data){
   data <- data %>% 
     mutate(setting = c("ac" = "Drum King", so = "Social")[setting], 
@@ -457,3 +542,129 @@ multi_polar_hist <- function(data){
   
   q
 } 
+
+# readxl::read_xlsx("data/drumking_final/meta/cut_drum_king_final_pre.xlsx", col_names = F) %>% 
+#   select(1:2) %>% 
+#   set_names(c("file", "cut_time")) %>%  
+#   mutate(cut_time = cut_time %>% str_replace("[m]", ",") %>% 
+#            map_dbl(~{as.numeric(.x[[1]]) * 60 + as.numeric(.x[[2]]) + as.numeric(.x[[3]])/1000})) %>% 
+#   writexl::write_xlsx("data/drumking_final/meta/cuttimes_audio_iso.xlsx")
+
+# Usage:
+# Can be used to plot predictions from models or means values from data over setting/tempo
+# If  lmer_model is not NULL or from_prediction = TRUE, then model predictions are used. data must fit the model.
+# Otherwise values of the variable var_name from data are plotted. If var_name is named vector, name will be used as label for y-axis.
+#
+# Example:
+#  lsi_mod <- lmerTest::lmer(log_sd_ioi ~ age_group * setting + tempo + (1|p_id), data = iso_features)
+#  prediction_interaction_plot(iso_features, lsi_mod, var_name = "c("Imprecision" = "log_sd_ioi"), from_prediction = T)
+
+prediction_interaction_plot <- function(data = iso_features, 
+                                        var_name = "log_sd_ioi", 
+                                        lmer_model = NULL, 
+                                        from_prediction = T, 
+                                        alpha = .4){
+
+  if(from_prediction && !is.null(lmer_model)){
+    pred <- lmer_model %>% predict()
+  }
+  else{
+    pred <- data[[var_name]]
+  }
+  data <- data %>% 
+    mutate(pred =  pred, age_group_n = factor(age_group) %>% fct_relevel("e", after = 4) %>% as.numeric()) 
+  sum_stats <- data %>%  
+    group_by(age_group_n, setting, tempo) %>% 
+    summarise(se = sd(pred)/sqrt(length(pred)), 
+              se_data = sd(!!sym(var_name))/sqrt(length(p_id)), 
+              pred = mean(pred), 
+              dg = sprintf("%s / %s", 
+                           c("so" = "Person", "ac" = "Metronome")[setting], 
+                           c("fa" = "400 ms", "sl" = "600 ms")[tempo]), 
+              .groups = "drop", n = n()) 
+  q <- sum_stats %>% ggplot(aes(x = age_group_n, y = pred, color = dg)) 
+  q <- q + geom_line(aes(group = dg)) 
+  q <- q + theme_bw()  
+  if(from_prediction){
+    q <- q + geom_ribbon(aes(ymin = pred - 1.96* se, 
+                             ymax = pred + 1.96*se, 
+                             fill = dg), 
+                         alpha = alpha)
+    
+  }
+  else{
+    q <- q + geom_ribbon(aes(ymin = pred - 1.96 * se_data, 
+                             ymax = pred + 1.96 * se_data,
+                             fill = dg),
+                         alpha = alpha)
+    
+  }
+  q <- q + scale_x_continuous(labels = c("5yo", "6yo", "7yo", "8yo", "Adults"), 
+                              breaks = 1:5)
+  palette <- c(RColorBrewer::brewer.pal(3, "Blues")[1:2], RColorBrewer::brewer.pal(3, "Reds")[1:2])
+  q <- q + scale_fill_manual(values = palette) 
+  q <- q + scale_color_manual(values = palette)  
+  q <- q + labs(x = "Age Group", y = if(!is.null(names(var_name))) names(var_name)[1] else "Imprecision", fill = "Setting/Tempo", color = "Setting/Tempo")
+  q
+}
+
+tempo_abs_dev_plot_ridge <- function(data = iso_features, remove_outlier = TRUE){
+  if(!("tempo_abs_dev" %in% names(data))){
+    data <- data %>% 
+      mutate(tempo_num = c("fa" = .4, "sl" = .6)[tempo]) %>% 
+      mutate(tempo_dev = (med_ioi - tempo_num),
+             tempo_abs_dev = abs(tempo_dev),
+             log10_tempo_abs_dev = log10(abs(tempo_dev))) 
+  } 
+  if(remove_outlier){
+    data <- data  %>%   
+      filter(tempo_abs_dev < .15, tempo_abs_dev > -.5)
+  }
+  q <- data %>% ggplot(aes(x = tempo_dev, y = tempo, fill = setting))
+  q <- q + ggridges::geom_density_ridges(alpha = .4, bandwidth = .001, stat = "binline")
+  q <- q + theme_bw() 
+  q <- q + scale_fill_viridis_d()
+  q
+}
+
+tempo_abs_dev_plot <- function(data = iso_features, remove_outlier = TRUE){
+  age_group_labels <- c("5" = "5-yo", "6" = "6-yo", "7" = "7-yo", "8" = "8-yo", "e" = "Adults")
+  if(!("tempo_abs_dev2" %in% names(data))){
+    data <- data %>% 
+      mutate(tempo_num = c("fa" = .4, "sl" = .6)[tempo]) %>% 
+      mutate(tempo_dev = (med_ioi - tempo_num),
+             tempo_abs_dev = abs(tempo_dev),
+             tempo_dev_bin = factor(ntile(tempo_abs_dev, 3)),
+             log10_tempo_abs_dev = log10(abs(tempo_dev)),
+             age_group = age_group_labels[age_group], 
+             combined_setting = sprintf("%s / %s", tempo, setting) %>% str_replace("fa", "Fast")) 
+  } 
+  if(remove_outlier){
+    data <- data  %>%   
+      filter(tempo_abs_dev < .15)
+  }
+  q <- data %>% ggplot(aes(x = age_group, y = med_ioi, fill = combined_setting))
+  q <- q + geom_hline(yintercept = .4, linetype = "dotted")
+  q <- q + geom_hline(yintercept = .6, linetype = "dotted")
+  q <- q + geom_boxplot(outlier.color = NA, alpha = .6)
+  q <- q + geom_jitter(alpha = .2, 
+                       #size = 1.5,
+                       position = position_dodge(width = .75), 
+                       aes(group = combined_setting))
+  q <- q + guides(fill = guide_legend(ncol = 2))
+  q <- q + theme_bw() 
+  q <- q + theme(panel.grid =  element_blank(),
+                 axis.text.x = element_text(size = 12),
+                 axis.text.y = element_text(size = 12),
+                 axis.title.x =  element_text(size = 14),
+                 axis.title.y =  element_text(size = 14),
+                 legend.position = c(.8, .14),
+                 legend.title =  element_text(size = 10),
+                 legend.text =  element_text(size = 8),
+                 legend.background  = element_rect(color = "black"))
+  q <- q + scale_fill_manual(values = c("dodgerblue4",  "steelblue1", "hotpink4", "violetred1"), 
+                             labels = c("Acoustic / Fast", "Person / Fast", "Acoustic / Slow", "Person / Slow"))
+  q <- q + labs(y = "Median IOI (s)", x = "Age Group", fill = "Conditions") 
+ #  q <- q + scale_color_viridis_b()
+  q
+}
