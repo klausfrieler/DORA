@@ -11,6 +11,7 @@ The DORA projects investigates rhythm production abilities of children in the ag
  * The raw data will appear in a data frame ``iso_data``, the derived features in the data frame ``iso_features``.
  * From there on, you are basically on your own. Please refer to paper for further information.
  * The raw data is in the directory ``/data/iso`` as compiled RDS files and as a largish set of files with  extracted onsets (CSV format). The file names encodes the most relevant information: experimenter, age group (5, 6, 7, 8, or e = adults), participant id (running number), trial id (running number), source (``ex``-perimenter or ``pa``-rticipant), tempo-condition (``fa``-st or ``sl``-ow), and experimental setting (``ac``-oustic or ``so``-cial). Same information can be found in ``iso_features`` data frame.
+ * The file ``iso_models.R`` contains all tested (linear mixed regression) models, summaries, model comparisons, as reported in the paper.
  
 
 ### Requirements
