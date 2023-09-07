@@ -14,9 +14,9 @@ The DORA projects investigates rhythm production abilities of children in the ag
  
 
 ### Requirements
-RStudio, R, packages *tidyverse*, *circular* *dtw*.
+R, RStudio, R packages: ``tidyverse``, ``circular``, ``dtw``.
 
-### Authors and maintainer
+### Authors and maintainers
 Klaus Frieler & Johanna Will  
 Max Planck Institute for Empirical Aesthetics  
 Grüneburgweg 14  
